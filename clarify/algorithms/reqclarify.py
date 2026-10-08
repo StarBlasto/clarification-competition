@@ -19,7 +19,6 @@ from clarify.env import ClarificationEnvironment
 
 
 class ReqClarify(ClarificationAlgorithmBase):
-
     def run(self, env: ClarificationEnvironment, problem: dict[str, Any]) -> str:
         """Initial baseline placeholder for registration."""
         messages = [{"role": "user", "content": problem["prompt"]}]
