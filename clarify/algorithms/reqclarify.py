@@ -6,7 +6,7 @@
 
 A clarification algorithm.
 
-Team: ReqClarify
+Team: PolyTeam
 Team Members: Shane Califano, Mohamed Sylla, William Blaine
 Main Contact: scalifano4740@floridapoly.edu
 """
