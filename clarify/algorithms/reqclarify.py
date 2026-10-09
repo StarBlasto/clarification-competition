@@ -6,7 +6,7 @@
 
 A clarification algorithm.
 
-Team: PolyTeam
+Team: NEXUS Lab
 Team Members: Shane Califano, Mohamed Sylla, William Blaine
 Main Contact: scalifano4740@floridapoly.edu
 """
