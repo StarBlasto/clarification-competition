@@ -30,6 +30,8 @@ import re
 import sys
 import threading
 import traceback
+import warnings
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Union
@@ -51,6 +53,9 @@ from clarify.env import (
     _ClarificationEnvironment,
 )
 from clarify.llm import LanguageModel
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 
 console = Console()
 
