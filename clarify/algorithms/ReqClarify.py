@@ -1,10 +1,10 @@
 from __future__ import annotations
 from typing import Any
-
 from clarify.env import ClarificationEnvironment, TooManyQuestionException
 from clarify.baselines.base import ClarificationAlgorithmBase
 from clarify.runtime import _validate_and_parse_evalplus_result
 
+import re
 
 # Sample Quickstart code, close to as seen in the README file.
 
@@ -111,8 +111,8 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
 
         UserPrompt = Problem["prompt"]
         ClarificationMessages += [{"role": "user", "content": UserPrompt}]
-        ProgrammingMessages += [{"role": "system", "content": "Original Prompt : " + UserPrompt}]
-        AuditMessages += [{"role": "system", "content": "Original Prompt : " + UserPrompt}]
+        ProgrammingMessages += [{"role": "user", "content": "Original Prompt : " + UserPrompt}]
+        AuditMessages += [{"role": "user", "content": "Original Prompt : " + UserPrompt}]
         
         # Begin clarification loop. Technically the original plan in the document said to only ask one question, but I figure an implementation like this
         # gives us more room to change our plans if necessary.
@@ -146,56 +146,66 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
             QuestionDict = Question[0]
             QuestionResponse = Question[1]
             Message = f"Clarification Question : {QuestionDict["Question"]}\nUser Response : {QuestionResponse}"
-            ProgrammingMessages += [{"role": "system", "content": Message}]
-            AuditMessages += [{"role": "system", "content": Message}]
+            ProgrammingMessages += [{"role": "user", "content": Message}]
+            AuditMessages += [{"role": "user", "content": Message}]
 
 
         Audit = True
-        # Begin coding/auditing.
+        MaxAuditAttempts = 5
         Code = Env.llm(ProgrammingMessages)
-        if Audit:
-            # Note here that we do actually have exec_code which could be useful. For now I'm just going to pass the code to the auditor AI.
-            Message = f"Current Code :\n\n`{Code}`"
-            AuditMessages += [{"role": "system", "content": Message}]
-            Code = Env.llm(AuditMessages)
+        AuditMessages += [{"role": "assistant", "content": Code}]
 
-        return Code
+        if Audit:
+            for _ in range(MaxAuditAttempts):
+                CleanCode = Code.replace("```python", "").replace("```", "").strip()
+                
+                try:
+                    TestBlock = "\n".join(Problem.get("test_list", []))
+                    FullScript = CleanCode + "\n\n" + TestBlock
+                    
+                    exec(FullScript, {})
+
+                    Code = CleanCode
+                    break
+                
+                except Exception as e:
+                    ErrorMessage = f"The code failed during testing with the following error:\n{type(e).__name__}: {str(e)}\n\nPlease fix this error and return ONLY the corrected Python code."
+                    AuditMessages += [{"role": "user", "content": ErrorMessage}]
+                    Code = Env.llm(AuditMessages)
+                    AuditMessages += [{"role": "assistant", "content": Code}]
+        
+        return Code.replace("```python", "").replace("```", "").strip()
 
 
 
 
     def ParseClarification(Self, Clarification, Threshold):
-        # We could also try splitting these by line instead of just by space, which may be better, depending on the output we're receiving.
-        Outputs = dict();
-        ListVer = Clarification.split() 
-        LowerList = Clarification.lower().split()
-        NeedPos = LowerList.index("need:") + 1; # Position of the NEED indicator.
-        Need = ListVer[NeedPos]; # The NEED value. (Should be 0-3).
-
-        Outputs["Need"] = int(Need) > Threshold; # Boolean for whether or not a question is necessary.
-
-        IssueSearch = "ISSUE:"
-        IssuePos = Clarification.lower().find(IssueSearch.lower());
-
-        InterpretationSearchA = "INTERPRETATION_A:"
-        InterpretationAPos = Clarification.lower().find(InterpretationSearchA.lower());
-
-        InterpretationSearchB = "INTERPRETATION_B:"
-        InterpretationBPos = Clarification.lower().find(InterpretationSearchB.lower());
-
-        QuestionSearch = "QUESTION:" # The QUESTION search term.
-        QuestionPos = Clarification.lower().find(QuestionSearch.lower());
-
-        Issue = Clarification[IssuePos+len(IssueSearch):InterpretationAPos].strip()
-        InterpretationA = Clarification[InterpretationAPos+len(InterpretationSearchA):InterpretationBPos].strip()
-        InterpretationB = Clarification[InterpretationBPos+len(InterpretationSearchB):QuestionPos].strip()
-        Question = Clarification[QuestionPos+len(QuestionSearch):].strip()
-
-        Outputs["Issue"] = Issue;
-        Outputs["InterpretationA"] = InterpretationA;
-        Outputs["InterpretationB"] = InterpretationB;
-        Outputs["Question"] = Question.strip();
-
+        Outputs = {
+            "Need": False,
+            "Issue": "",
+            "InterpretationA": "",
+            "InterpretationB": "",
+            "Question": ""
+        }
+        
+        # Safely extract NEED value
+        need_match = re.search(r'NEED:\s*(\d+)', Clarification, re.IGNORECASE)
+        if need_match:
+            Outputs["Need"] = int(need_match.group(1)) > Threshold
+            
+        # Safely extract text blocks
+        issue_match = re.search(r'ISSUE:\s*(.*?)(?=INTERPRETATION_A:|$)', Clarification, re.IGNORECASE | re.DOTALL)
+        if issue_match: Outputs["Issue"] = issue_match.group(1).strip()
+        
+        int_a_match = re.search(r'INTERPRETATION_A:\s*(.*?)(?=INTERPRETATION_B:|$)', Clarification, re.IGNORECASE | re.DOTALL)
+        if int_a_match: Outputs["InterpretationA"] = int_a_match.group(1).strip()
+        
+        int_b_match = re.search(r'INTERPRETATION_B:\s*(.*?)(?=QUESTION:|$)', Clarification, re.IGNORECASE | re.DOTALL)
+        if int_b_match: Outputs["InterpretationB"] = int_b_match.group(1).strip()
+        
+        question_match = re.search(r'QUESTION:\s*(.*)', Clarification, re.IGNORECASE | re.DOTALL)
+        if question_match: Outputs["Question"] = question_match.group(1).strip()
+        
         return Outputs
 
         
