@@ -12,15 +12,16 @@ Main Contact: kelish@floridapoly.edu
 """
 
 from __future__ import annotations
-from typing import Any
-from clarify.env import ClarificationEnvironment, TooManyQuestionException
-from clarify.baselines.base import ClarificationAlgorithmBase
 
-import re
-import math
-import heapq
 import collections
+import heapq
 import itertools
+import math
+import re
+from typing import Any
+
+from clarify.baselines.base import ClarificationAlgorithmBase
+from clarify.env import ClarificationEnvironment
 
 
 # clarification prompt: decide if we need to ask one focused question
