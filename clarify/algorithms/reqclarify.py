@@ -22,6 +22,7 @@ from typing import Any
 
 from clarify.baselines.base import ClarificationAlgorithmBase
 from clarify.env import ClarificationEnvironment
+
 # clarification prompt: decide if we need to ask one focused question
 SystemClarificationPrompt = '''
 You are a software requirements analyst. Do NOT generate code.
