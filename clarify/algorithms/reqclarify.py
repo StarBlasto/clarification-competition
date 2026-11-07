@@ -20,7 +20,6 @@ from typing import Any
 from clarify.baselines.base import ClarificationAlgorithmBase
 from clarify.env import ClarificationEnvironment
 
-
 SystemClarificationPrompt = '''
 You are a software requirements analyst.
 Do NOT generate code.
@@ -53,7 +52,6 @@ INTERPRETATION_B: <behavior B or NONE>
 QUESTION: <question or NONE>
 '''
 
-
 SystemCodePrompt = '''
 You are an expert Python programmer.
 
@@ -74,7 +72,6 @@ CRITICAL RULES (violations will cause test failures):
 
 Return ONLY the Python implementation. No explanations, no tests, no markdown fences.
 '''
-
 
 SystemAuditPrompt = '''
 You are a strict software correctness auditor.
@@ -98,6 +95,7 @@ Rules:
 
 
 class ReqClarifyClarification(ClarificationAlgorithmBase):
+    # only ask when the model rates the ambiguity as 2 or higher
     DEFAULT_CONFIG = {
         "ask_threshold": 2,
         "max_questions": 1,
@@ -105,6 +103,7 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
     }
 
     def extract_code(self, raw_text: str) -> str:
+        # pull python out of markdown fences if present, otherwise use the raw text
         if not raw_text:
             return ""
         match = re.search(r"```(?:python)?\s*(.*?)```", raw_text, re.DOTALL | re.IGNORECASE)
@@ -117,12 +116,15 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
         return "\n".join(lines).strip()
 
     def has_bare_return(self, code: str) -> bool:
+        # true if any line is just "return" with nothing after it
         return bool(re.search(r"^\s*return\s*$", code, re.MULTILINE))
 
     def has_broken_index_pattern(self, code: str) -> bool:
+        # catches the common "if arr < arr:" style bug
         return bool(re.search(r"\bif\s+\w+\s*[<>]=?\s*\w+\s*:", code))
 
     def is_valid_python(self, code: str, entry_point: str = "") -> bool:
+        # basic syntax + function-name check, plus reject bare returns
         if not code or len(code.strip()) < 10:
             return False
         try:
@@ -143,6 +145,7 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
         return True
 
     def validate_or_fallback(self, audited_code: str, candidate_code: str, entry_point: str = "") -> str:
+        # prefer the audited version if it parses, otherwise fall back to the original candidate
         if self.is_valid_python(audited_code, entry_point):
             return audited_code
         if self.is_valid_python(candidate_code, entry_point):
@@ -158,7 +161,7 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
         user_prompt = problem["prompt"]
         entry_point = problem.get("entry_point", "")
 
-        # Step 1: Analyze the Requirement
+        # analyze the requirement and decide whether to ask
         analysis_input = (
             f"FUNCTION: {entry_point}\n"
             f"REQUIREMENT:\n{user_prompt}"
@@ -200,7 +203,7 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
             else:
                 break
 
-        # Step 2: Generate Code
+        # generate the initial implementation
         if answer is not None and answer.strip():
             code_user_input = (
                 f"ORIGINAL REQUIREMENT:\n{user_prompt}\n\n"
@@ -226,7 +229,7 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
         candidate_raw = env.llm(programming_messages)
         candidate_code = self.extract_code(candidate_raw)
 
-        # Step 3: Audit
+        # audit the candidate against the requirement and clarification
         audit_user_input = (
             f"ORIGINAL REQUIREMENT:\n{user_prompt}\n\n"
             f"FUNCTION:\n{entry_point}\n\n"
@@ -243,9 +246,9 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
 
         code = self.validate_or_fallback(audited_code, candidate_code, entry_point)
 
-        # Step 4: Targeted repair for common failure patterns + exec_code loop
+        # repair loop
         if hasattr(env, "exec_code"):
-            for attempt in range(max_audit_attempts):
+            for _attempt in range(max_audit_attempts):
                 clean_code = self.extract_code(code)
                 if not clean_code:
                     break
@@ -304,6 +307,7 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
         return self.extract_code(code)
 
     def parse_clarification(self, clarification: str, ask_threshold: int = 2) -> dict[str, Any]:
+        # pull the structured fields out of the model's analysis response
         outputs: dict[str, Any] = {
             "need": 0,
             "ask": False,
