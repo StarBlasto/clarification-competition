@@ -20,7 +20,7 @@ from typing import Any
 from clarify.baselines.base import ClarificationAlgorithmBase
 from clarify.env import ClarificationEnvironment
 
-SystemClarificationPrompt = '''
+SystemClarificationPrompt = """
 You are a software requirements analyst.
 Do NOT generate code.
 
@@ -50,9 +50,9 @@ ISSUE: <short description or NONE>
 INTERPRETATION_A: <behavior A or NONE>
 INTERPRETATION_B: <behavior B or NONE>
 QUESTION: <question or NONE>
-'''
+"""
 
-SystemCodePrompt = '''
+SystemCodePrompt = """
 You are an expert Python programmer.
 
 Implement the requested function according to the original requirement and, when provided, the user's clarification.
@@ -71,9 +71,9 @@ CRITICAL RULES (violations will cause test failures):
 7. The code must be complete and syntactically valid Python.
 
 Return ONLY the Python implementation. No explanations, no tests, no markdown fences.
-'''
+"""
 
-SystemAuditPrompt = '''
+SystemAuditPrompt = """
 You are a strict software correctness auditor.
 
 Check whether the candidate implementation satisfies the requirement and clarification (if any).
@@ -91,7 +91,7 @@ Rules:
 - If the code has any of the above bugs, repair them.
 - If the implementation is already correct, leave it unchanged.
 - Return ONLY the final Python implementation (ASCII only). No explanations.
-'''
+"""
 
 
 class ReqClarifyClarification(ClarificationAlgorithmBase):
@@ -134,7 +134,8 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
 
         if entry_point:
             defined_funcs = {
-                node.name for node in ast.walk(tree)
+                node.name
+                for node in ast.walk(tree)
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             }
             if entry_point not in defined_funcs:
@@ -144,7 +145,9 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
             return False
         return True
 
-    def validate_or_fallback(self, audited_code: str, candidate_code: str, entry_point: str = "") -> str:
+    def validate_or_fallback(
+        self, audited_code: str, candidate_code: str, entry_point: str = ""
+    ) -> str:
         # prefer the audited version if it parses, otherwise fall back to the original candidate
         if self.is_valid_python(audited_code, entry_point):
             return audited_code
@@ -162,10 +165,7 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
         entry_point = problem.get("entry_point", "")
 
         # analyze the requirement and decide whether to ask
-        analysis_input = (
-            f"FUNCTION: {entry_point}\n"
-            f"REQUIREMENT:\n{user_prompt}"
-        )
+        analysis_input = f"FUNCTION: {entry_point}\nREQUIREMENT:\n{user_prompt}"
         clarification_messages = [
             {"role": "system", "content": SystemClarificationPrompt},
             {"role": "user", "content": analysis_input},
@@ -326,17 +326,23 @@ class ReqClarifyClarification(ClarificationAlgorithmBase):
             outputs["need"] = need_val
             outputs["ask"] = need_val >= ask_threshold
 
-        issue_match = re.search(r"ISSUE:\s*(.*?)(?=INTERPRETATION_A:|$)", clarification, re.IGNORECASE | re.DOTALL)
+        issue_match = re.search(
+            r"ISSUE:\s*(.*?)(?=INTERPRETATION_A:|$)", clarification, re.IGNORECASE | re.DOTALL
+        )
         if issue_match:
             outputs["issue"] = issue_match.group(1).strip()
 
         int_a_match = re.search(
-            r"INTERPRETATION_A:\s*(.*?)(?=INTERPRETATION_B:|$)", clarification, re.IGNORECASE | re.DOTALL
+            r"INTERPRETATION_A:\s*(.*?)(?=INTERPRETATION_B:|$)",
+            clarification,
+            re.IGNORECASE | re.DOTALL,
         )
         if int_a_match:
             outputs["interpretation_a"] = int_a_match.group(1).strip()
 
-        int_b_match = re.search(r"INTERPRETATION_B:\s*(.*?)(?=QUESTION:|$)", clarification, re.IGNORECASE | re.DOTALL)
+        int_b_match = re.search(
+            r"INTERPRETATION_B:\s*(.*?)(?=QUESTION:|$)", clarification, re.IGNORECASE | re.DOTALL
+        )
         if int_b_match:
             outputs["interpretation_b"] = int_b_match.group(1).strip()
 
